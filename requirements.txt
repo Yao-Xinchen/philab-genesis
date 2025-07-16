@@ -1,3 +1,0 @@
-torch~=2.8.0.dev20250316+cu128
-setuptools~=75.8.0
-genesis-world~=0.2.1
