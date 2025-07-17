@@ -70,6 +70,13 @@ def get_cfgs():
             # "foot_R_Joint",
         ],
 
+        "penalize_contact_links": [
+            "knee_R_Link",
+            "knee_L_Link",
+            "hip_R_Link",
+            "hip_L_Link",
+        ],
+
         "foot_names": [
             "foot_R_Link",
             "foot_L_Link",
@@ -122,6 +129,8 @@ def get_cfgs():
         "gait_force_sigma": 25.0,
         "gait_vel_sigma": 0.25,
         "gait_height_sigma": 0.005,
+        "min_feet_distance": 0.115,
+        "about_landing_threshold": 0.08,
 
         "reward_scales": {
         },

@@ -68,6 +68,7 @@ class PfEnv:
         self.motor_dofs = [self.robot.get_joint(name).dof_idx_local for name in self.env_cfg["dof_names"]]
         self.foot_links = [self.robot.get_link(name).idx_local for name in self.env_cfg["foot_names"]]
         self.foot_num = len(self.foot_links)
+        self.penalize_links = [self.robot.get_link(name).idx_local for name in self.env_cfg["penalize_contact_links"]]
 
         # PD control parameters
         self.robot.set_dofs_kp([self.env_cfg["kp"]] * self.num_actions, self.motor_dofs)
@@ -110,7 +111,7 @@ class PfEnv:
             device=self.device,
             dtype=gs.tc_float,
         )
-        self.contact_forces = self.robot.self.robot.get_links_net_contact_force()  # (n_envs, n_links, 3)
+        self.contact_forces = self.robot.get_links_net_contact_force()  # (n_envs, n_links, 3)
 
         self.foot_pos = torch.zeros((self.num_envs, self.foot_num, 3), device=self.device, dtype=gs.tc_float)
         self.foot_quat = torch.zeros((self.num_envs, self.foot_num, 4), device=self.device, dtype=gs.tc_float)
@@ -453,50 +454,50 @@ class PfEnv:
         if self.reward_scales["tracking_contacts_shaped_force"] > 0:
             for i in range(self.foot_num):
                 reward += (1 - desired_contact[:, i]) * torch.exp(
-                    -foot_forces[:, i] ** 2 / self.cfg.rewards.gait_force_sigma)
+                    -foot_forces[:, i] ** 2 / self.reward_cfg["gait_force_sigma"])
         else:
             for i in range(self.foot_num):
                 reward += (1 - desired_contact[:, i]) * (
-                        1 - torch.exp(-foot_forces[:, i] ** 2 / self.cfg.rewards.gait_force_sigma))
+                        1 - torch.exp(-foot_forces[:, i] ** 2 / self.reward_cfg["gait_force_sigma"]))
 
         return reward / self.foot_num
 
     def _reward_tracking_contacts_shaped_vel(self):
-        foot_velocities = torch.norm(self.foot_velocities, dim=-1)
+        foot_velocities = torch.norm(self.foot_vel, dim=-1)
         desired_contact = self.desired_contact_states
         reward = 0
         if self.reward_scales["tracking_contacts_shaped_vel"] > 0:
             for i in range(self.foot_num):
                 reward += desired_contact[:, i] * torch.exp(
-                    -foot_velocities[:, i] ** 2 / self.cfg.rewards.gait_vel_sigma
+                    -foot_velocities[:, i] ** 2 / self.reward_cfg["gait_vel_sigma"]
                 )
         else:
             for i in range(self.foot_num):
                 reward += desired_contact[:, i] * (
-                        1 - torch.exp(-foot_velocities[:, i] ** 2 / self.cfg.rewards.gait_vel_sigma))
+                        1 - torch.exp(-foot_velocities[:, i] ** 2 / self.reward_cfg["gait_vel_sigma"]))
         return reward / self.foot_num
 
     def _reward_feet_distance(self):
         # Penalize base height away from target
-        feet_distance = torch.norm(self.foot_positions[:, 0, :2] - self.foot_positions[:, 1, :2], dim=-1)
-        reward = torch.clip(self.cfg.rewards.min_feet_distance - feet_distance, 0, 1)
+        feet_distance = torch.norm(self.foot_pos[:, 0, :2] - self.foot_pos[:, 1, :2], dim=-1)
+        reward = torch.clip(self.reward_cfg["min_feet_distance"] - feet_distance, 0, 1)
         return reward
 
     def _reward_feet_regulation(self):
-        feet_height = self.cfg.rewards.base_height_target * 0.001
+        feet_height = self.reward_cfg["base_height_target"] * 0.001
         reward = torch.sum(
             torch.exp(-self.foot_heights / feet_height)
-            * torch.square(torch.norm(self.foot_velocities[:, :, :2], dim=-1)), dim=1)
+            * torch.square(torch.norm(self.foot_vel[:, :, :2], dim=-1)), dim=1)
         return reward
 
     def _reward_collision(self):
         return torch.sum(
-            torch.norm(self.contact_forces[:, self.penalised_contact_indices, :], dim=-1) > 1.0, dim=1)
+            torch.norm(self.contact_forces[:, self.penalize_links, :], dim=-1) > 1.0, dim=1)
 
     def _reward_foot_landing_vel(self):
-        z_vels = self.foot_velocities[:, :, 2]
+        z_vels = self.foot_vel[:, :, 2]
         contacts = self.contact_forces[:, self.foot_links, 2] > 0.1
-        about_to_land = (self.foot_heights < self.cfg.rewards.about_landing_threshold) & (~contacts) & (z_vels < 0.0)
+        about_to_land = (self.foot_heights < self.reward_cfg["about_landing_threshold"]) & (~contacts) & (z_vels < 0.0)
         landing_z_vels = torch.where(about_to_land, z_vels, torch.zeros_like(z_vels))
         reward = torch.sum(torch.square(landing_z_vels), dim=1)
         return reward
