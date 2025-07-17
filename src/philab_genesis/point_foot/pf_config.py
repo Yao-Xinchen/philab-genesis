@@ -70,6 +70,11 @@ def get_cfgs():
             # "foot_R_Joint",
         ],
 
+        "foot_names": [
+            "foot_R_Link",
+            "foot_L_Link",
+        ],
+
         # PD
         "kp": 42.0,
         "kd": 2.5,
@@ -86,6 +91,8 @@ def get_cfgs():
         "action_scale": 0.25,
         "simulate_action_latency": True,
         "clip_actions": 100.0,
+
+        "base_height_target": 0.68,
     }
 
     obs_cfg = {
@@ -99,9 +106,10 @@ def get_cfgs():
     }
 
     reward_cfg = {
-        "tracking_sigma": 0.25,
-        "base_height_target": 0.3,
-        "feet_height_target": 0.075,
+        "tracking_sigma": 0.2,
+        "ang_tracking_sigma": 0.25,
+        "base_height_target": 0.68,
+        "feet_height_target": 0.10,
         "reward_scales": {
         },
     }

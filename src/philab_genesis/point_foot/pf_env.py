@@ -65,10 +65,13 @@ class PfEnv:
 
         # names to indices
         self.motor_dofs = [self.robot.get_joint(name).dof_idx_local for name in self.env_cfg["dof_names"]]
+        self.foot_links = [self.robot.get_link(name).idx_local for name in self.env_cfg["foot_names"]]
 
         # PD control parameters
         self.robot.set_dofs_kp([self.env_cfg["kp"]] * self.num_actions, self.motor_dofs)
         self.robot.set_dofs_kv([self.env_cfg["kd"]] * self.num_actions, self.motor_dofs)
+
+        self.dof_pos_lower_limits, self.dof_pos_upper_limits = self.robot.get_dofs_limit(self.motor_dofs)
 
         self._prepare_rewards()
 
@@ -93,14 +96,18 @@ class PfEnv:
         self.last_actions = torch.zeros_like(self.actions)
         self.dof_pos = torch.zeros_like(self.actions)
         self.dof_vel = torch.zeros_like(self.actions)
+        self.dof_acc = torch.zeros_like(self.actions)
+        self.torques = torch.zeros_like(self.actions)
         self.last_dof_vel = torch.zeros_like(self.actions)
         self.base_pos = torch.zeros((self.num_envs, 3), device=self.device, dtype=gs.tc_float)
         self.base_quat = torch.zeros((self.num_envs, 4), device=self.device, dtype=gs.tc_float)
+        self.base_euler = torch.zeros((self.num_envs, 3), device=self.device, dtype=gs.tc_float)
         self.default_dof_pos = torch.tensor(
             [self.env_cfg["default_joint_angles"][name] for name in self.env_cfg["dof_names"]],
             device=self.device,
             dtype=gs.tc_float,
         )
+        self.contact_forces = self.robot.self.robot.get_links_net_contact_force() # (n_envs, n_links, 3)
         self.extras = dict()  # extra information for logging
 
     def _prepare_rewards(self):
@@ -136,6 +143,9 @@ class PfEnv:
         self.projected_gravity = transform_by_quat(self.global_gravity, inv_base_quat)
         self.dof_pos[:] = self.robot.get_dofs_position(self.motor_dofs)
         self.dof_vel[:] = self.robot.get_dofs_velocity(self.motor_dofs)
+        self.dof_acc[:] = (self.last_dof_vel - self.dof_vel) / self.dt
+        self.torques[:] = self.robot.get_dofs_control_force(self.motor_dofs)
+        self.contact_forces[:] = self.robot.get_links_net_contact_force()
 
         # resample commands
         envs_idx = (
@@ -241,14 +251,18 @@ class PfEnv:
         return torch.sum(torch.square(self.base_ang_vel[:, :2]), dim=1)
 
     def _reward_orientation(self):
-        # Penalize non flat base orientation
+        # Penalize non-flat base orientation
         reward = torch.sum(torch.square(self.projected_gravity[:, :2]), dim=1)
         return reward
 
+    # def _reward_base_height(self):
+    #     # Penalize base height away from target
+    #     base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
+    #     return torch.square(base_height - self.cfg.rewards.base_height_target)
+
     def _reward_base_height(self):
-        # Penalize base height away from target
-        base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
-        return torch.square(base_height - self.cfg.rewards.base_height_target)
+        base_height = self.base_pos[:, 2]
+        return torch.square(base_height - self.reward_cfg["base_height_target"])
 
     def _reward_torques(self):
         # Penalize torques
@@ -274,8 +288,10 @@ class PfEnv:
 
     def _reward_dof_pos_limits(self):
         # Penalize dof positions too close to the limit
-        out_of_limits = -(self.dof_pos - self.dof_pos_limits[:, 0]).clip(max=0.0)  # lower limit
-        out_of_limits += (self.dof_pos - self.dof_pos_limits[:, 1]).clip(min=0.0)
+        # out_of_limits = -(self.dof_pos - self.dof_pos_limits[:, 0]).clip(max=0.0)  # lower limit
+        # out_of_limits += (self.dof_pos - self.dof_pos_limits[:, 1]).clip(min=0.0)
+        out_of_limits = -(self.dof_pos - self.dof_pos_lower_limits).clip(max=0.0)
+        out_of_limits += (self.dof_pos - self.dof_pos_upper_limits).clip(min=0.0)
         return torch.sum(out_of_limits, dim=1)
 
     def _reward_tracking_lin_vel(self):
@@ -283,43 +299,43 @@ class PfEnv:
         lin_vel_error = torch.sum(
             torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1
         )
-        return torch.exp(-lin_vel_error / self.cfg.rewards.tracking_sigma)
+        return torch.exp(-lin_vel_error / self.reward_cfg["tracking_sigma"])
 
     def _reward_tracking_ang_vel(self):
         # Tracking of angular velocity commands (yaw)
         ang_vel_error = torch.square(self.commands[:, 2] - self.base_ang_vel[:, 2])
-        return torch.exp(-ang_vel_error / self.cfg.rewards.ang_tracking_sigma)
+        return torch.exp(-ang_vel_error / self.reward_cfg["ang_tracking_sigma"])
 
     def _reward_tracking_contacts_shaped_force(self):
-        foot_forces = torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1)
+        foot_forces = torch.norm(self.contact_forces[:, self.foot_links, :], dim=-1)
         desired_contact = self.desired_contact_states
 
         reward = 0
         if self.reward_scales["tracking_contacts_shaped_force"] > 0:
-            for i in range(len(self.feet_indices)):
+            for i in range(len(self.foot_links)):
                 reward += (1 - desired_contact[:, i]) * torch.exp(
                     -foot_forces[:, i] ** 2 / self.cfg.rewards.gait_force_sigma)
         else:
-            for i in range(len(self.feet_indices)):
+            for i in range(len(self.foot_links)):
                 reward += (1 - desired_contact[:, i]) * (
                         1 - torch.exp(-foot_forces[:, i] ** 2 / self.cfg.rewards.gait_force_sigma))
 
-        return reward / len(self.feet_indices)
+        return reward / len(self.foot_links)
 
     def _reward_tracking_contacts_shaped_vel(self):
         foot_velocities = torch.norm(self.foot_velocities, dim=-1)
         desired_contact = self.desired_contact_states
         reward = 0
         if self.reward_scales["tracking_contacts_shaped_vel"] > 0:
-            for i in range(len(self.feet_indices)):
+            for i in range(len(self.foot_links)):
                 reward += desired_contact[:, i] * torch.exp(
                     -foot_velocities[:, i] ** 2 / self.cfg.rewards.gait_vel_sigma
                 )
         else:
-            for i in range(len(self.feet_indices)):
+            for i in range(len(self.foot_links)):
                 reward += desired_contact[:, i] * (
                         1 - torch.exp(-foot_velocities[:, i] ** 2 / self.cfg.rewards.gait_vel_sigma))
-        return reward / len(self.feet_indices)
+        return reward / len(self.foot_links)
 
     def _reward_feet_distance(self):
         # Penalize base height away from target
@@ -340,7 +356,7 @@ class PfEnv:
 
     def _reward_foot_landing_vel(self):
         z_vels = self.foot_velocities[:, :, 2]
-        contacts = self.contact_forces[:, self.feet_indices, 2] > 0.1
+        contacts = self.contact_forces[:, self.foot_links, 2] > 0.1
         about_to_land = (self.foot_heights < self.cfg.rewards.about_landing_threshold) & (~contacts) & (z_vels < 0.0)
         landing_z_vels = torch.where(about_to_land, z_vels, torch.zeros_like(z_vels))
         reward = torch.sum(torch.square(landing_z_vels), dim=1)
