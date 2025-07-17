@@ -232,3 +232,116 @@ class PfEnv:
         return self.obs_buf, None
 
     # ------------ reward functions----------------
+    def _reward_lin_vel_z(self):
+        # Penalize z axis base linear velocity
+        return torch.square(self.base_lin_vel[:, 2])
+
+    def _reward_ang_vel_xy(self):
+        # Penalize xy axes base angular velocity
+        return torch.sum(torch.square(self.base_ang_vel[:, :2]), dim=1)
+
+    def _reward_orientation(self):
+        # Penalize non flat base orientation
+        reward = torch.sum(torch.square(self.projected_gravity[:, :2]), dim=1)
+        return reward
+
+    def _reward_base_height(self):
+        # Penalize base height away from target
+        base_height = torch.mean(self.root_states[:, 2].unsqueeze(1) - self.measured_heights, dim=1)
+        return torch.square(base_height - self.cfg.rewards.base_height_target)
+
+    def _reward_torques(self):
+        # Penalize torques
+        return torch.sum(torch.square(self.torques), dim=1)
+
+    def _reward_dof_acc(self):
+        # Penalize dof accelerations
+        return torch.sum(torch.square(self.dof_acc), dim=1)
+
+    def _reward_action_rate(self):
+        # Penalize changes in actions
+        return torch.sum(torch.square(self.actions - self.last_actions[:, :, 0]), dim=1)
+
+    def _reward_action_smooth(self):
+        # Penalize changes in actions
+        return torch.sum(
+            torch.square(
+                self.actions - 2 * self.last_actions[:, :, 0] + self.last_actions[:, :, 1]), dim=1)
+
+    def _reward_keep_balance(self):
+        return torch.ones(
+            self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+
+    def _reward_dof_pos_limits(self):
+        # Penalize dof positions too close to the limit
+        out_of_limits = -(self.dof_pos - self.dof_pos_limits[:, 0]).clip(max=0.0)  # lower limit
+        out_of_limits += (self.dof_pos - self.dof_pos_limits[:, 1]).clip(min=0.0)
+        return torch.sum(out_of_limits, dim=1)
+
+    def _reward_tracking_lin_vel(self):
+        # Tracking of linear velocity commands (xy axes)
+        lin_vel_error = torch.sum(
+            torch.square(self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1
+        )
+        return torch.exp(-lin_vel_error / self.cfg.rewards.tracking_sigma)
+
+    def _reward_tracking_ang_vel(self):
+        # Tracking of angular velocity commands (yaw)
+        ang_vel_error = torch.square(self.commands[:, 2] - self.base_ang_vel[:, 2])
+        return torch.exp(-ang_vel_error / self.cfg.rewards.ang_tracking_sigma)
+
+    def _reward_tracking_contacts_shaped_force(self):
+        foot_forces = torch.norm(self.contact_forces[:, self.feet_indices, :], dim=-1)
+        desired_contact = self.desired_contact_states
+
+        reward = 0
+        if self.reward_scales["tracking_contacts_shaped_force"] > 0:
+            for i in range(len(self.feet_indices)):
+                reward += (1 - desired_contact[:, i]) * torch.exp(
+                    -foot_forces[:, i] ** 2 / self.cfg.rewards.gait_force_sigma)
+        else:
+            for i in range(len(self.feet_indices)):
+                reward += (1 - desired_contact[:, i]) * (
+                        1 - torch.exp(-foot_forces[:, i] ** 2 / self.cfg.rewards.gait_force_sigma))
+
+        return reward / len(self.feet_indices)
+
+    def _reward_tracking_contacts_shaped_vel(self):
+        foot_velocities = torch.norm(self.foot_velocities, dim=-1)
+        desired_contact = self.desired_contact_states
+        reward = 0
+        if self.reward_scales["tracking_contacts_shaped_vel"] > 0:
+            for i in range(len(self.feet_indices)):
+                reward += desired_contact[:, i] * torch.exp(
+                    -foot_velocities[:, i] ** 2 / self.cfg.rewards.gait_vel_sigma
+                )
+        else:
+            for i in range(len(self.feet_indices)):
+                reward += desired_contact[:, i] * (
+                        1 - torch.exp(-foot_velocities[:, i] ** 2 / self.cfg.rewards.gait_vel_sigma))
+        return reward / len(self.feet_indices)
+
+    def _reward_feet_distance(self):
+        # Penalize base height away from target
+        feet_distance = torch.norm(self.foot_positions[:, 0, :2] - self.foot_positions[:, 1, :2], dim=-1)
+        reward = torch.clip(self.cfg.rewards.min_feet_distance - feet_distance, 0, 1)
+        return reward
+
+    def _reward_feet_regulation(self):
+        feet_height = self.cfg.rewards.base_height_target * 0.001
+        reward = torch.sum(
+            torch.exp(-self.foot_heights / feet_height)
+            * torch.square(torch.norm(self.foot_velocities[:, :, :2], dim=-1)), dim=1)
+        return reward
+
+    def _reward_collision(self):
+        return torch.sum(
+            torch.norm(self.contact_forces[:, self.penalised_contact_indices, :], dim=-1) > 1.0, dim=1)
+
+    def _reward_foot_landing_vel(self):
+        z_vels = self.foot_velocities[:, :, 2]
+        contacts = self.contact_forces[:, self.feet_indices, 2] > 0.1
+        about_to_land = (self.foot_heights < self.cfg.rewards.about_landing_threshold) & (~contacts) & (z_vels < 0.0)
+        landing_z_vels = torch.where(about_to_land, z_vels, torch.zeros_like(z_vels))
+        reward = torch.sum(torch.square(landing_z_vels), dim=1)
+        return reward
