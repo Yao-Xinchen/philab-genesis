@@ -35,7 +35,7 @@ def get_train_cfg(exp_name, max_iterations):
             "resume_path": None,
             "run_name": "",
             "runner_class_name": "runner_class_name",
-            "save_interval": 100,
+            "save_interval": 50,
         },
         "runner_class_name": "OnPolicyRunner",
         "seed": 1,
@@ -80,6 +80,7 @@ def get_cfgs():
             "knee_L_Link",
             "hip_R_Link",
             "hip_L_Link",
+            "base_Link",
         ],
 
         "foot_names": [
@@ -102,8 +103,8 @@ def get_cfgs():
         "kd": 2.5,
 
         # termination
-        "termination_if_roll_greater_than": 20,  # degree
-        "termination_if_pitch_greater_than": 20,
+        "termination_if_roll_greater_than": 90,  # degree
+        "termination_if_pitch_greater_than": 90,
 
         # base pose
         "base_init_pos": [0.0, 0.0, 0.8],

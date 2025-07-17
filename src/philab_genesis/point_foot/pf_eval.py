@@ -4,15 +4,18 @@ import torch
 import glob
 import re
 import genesis as gs
+from genesis.ext.trimesh.path.packing import visualize
 from philab_genesis.point_foot.pf_env import PfEnv
 from philab_genesis.point_foot.pf_config import get_cfgs, get_train_cfg
 from philab_genesis.rsl_rl.runners import OnPolicyRunner
+from philab_genesis.utils.visualize import Visualizer
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--exp_name", type=str, default="pointfoot")
     parser.add_argument("--ckpt", type=int, default=None)
+    parser.add_argument("-p", "--enable_plot", action="store_true")
     args = parser.parse_args()
 
     gs.init()
@@ -20,7 +23,7 @@ def main():
     log_dir = f"logs/{args.exp_name}"
     env_cfg, obs_cfg, reward_cfg, command_cfg = get_cfgs()
     train_cfg = get_train_cfg(args.exp_name, 100)
-    reward_cfg["reward_scales"] = {}
+    # reward_cfg["reward_scales"] = {}
 
     # visualize the target
     env_cfg["visualize_target"] = True
@@ -63,11 +66,32 @@ def main():
     runner.load(resume_path)
     policy = runner.get_inference_policy(device="cuda:0")
 
-    obs, _ = env.reset()
-    with torch.no_grad():
-        while True:
-            actions = policy(obs)
-            obs, _, rews, dones, infos = env.step(actions)
+    if args.enable_plot:
+        reward_names = list(env.reward_functions.keys())
+        visualizer = Visualizer(reward_names)
+
+        obs, _ = env.reset()
+        with torch.no_grad():
+            while True:
+                actions = policy(obs)
+                env.commands[0] = torch.tensor([0.5, 0.0, 0.0], device=actions.device)
+                obs, _, rews, dones, infos = env.step(actions)
+
+                reward_values = {}
+                for name, reward_func in env.reward_functions.items():
+                    raw_value = reward_func()[0].item()
+
+                    scale = reward_cfg["reward_scales"].get(name, 1.0)  # Default to 1.0 if no scale
+                    reward_values[name] = raw_value * scale
+
+                visualizer.update(reward_values)
+    else:
+        obs, _ = env.reset()
+        with torch.no_grad():
+            while True:
+                actions = policy(obs)
+                env.commands[0] = torch.tensor([0.5, 0.0, 0.0], device=actions.device)
+                obs, _, rews, dones, infos = env.step(actions)
 
 
 if __name__ == "__main__":
