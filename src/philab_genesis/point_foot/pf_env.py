@@ -58,6 +58,7 @@ class PfEnv:
                 file="resources/robots/PF_TRON1A/urdf/robot.urdf",
                 pos=self.base_init_pos.cpu().numpy(),
                 quat=self.base_init_quat.cpu().numpy(),
+                links_to_keep=self.env_cfg["links_to_keep"],
             ),
         )
 
@@ -96,7 +97,8 @@ class PfEnv:
             dtype=gs.tc_float,
         )
         self.actions = torch.zeros((self.num_envs, self.num_actions), device=self.device, dtype=gs.tc_float)
-        self.last_actions = torch.zeros_like(self.actions)
+        self.last_actions = (torch.zeros_like(self.actions)
+                             .unsqueeze(-1).repeat(1, 1, 2))  # add an extra dimension of size 2
         self.dof_pos = torch.zeros_like(self.actions)
         self.dof_vel = torch.zeros_like(self.actions)
         self.dof_acc = torch.zeros_like(self.actions)
@@ -148,7 +150,7 @@ class PfEnv:
 
     def step(self, actions):
         self.actions = torch.clip(actions, -self.env_cfg["clip_actions"], self.env_cfg["clip_actions"])
-        exec_actions = self.last_actions if self.simulate_action_latency else self.actions
+        exec_actions = self.last_actions[:, :, -1] if self.simulate_action_latency else self.actions
         target_dof_pos = exec_actions * self.env_cfg["action_scale"] + self.default_dof_pos
         self.robot.control_dofs_position(target_dof_pos, self.motor_dofs)
         self.scene.step()
@@ -217,7 +219,8 @@ class PfEnv:
             dim=-1,
         )
 
-        self.last_actions[:] = self.actions[:]
+        self.last_actions[:, :, 1] = self.last_actions[:, :, 0]
+        self.last_actions[:, :, 0] = self.actions[:]
         self.last_dof_vel[:] = self.dof_vel[:]
 
         return self.obs_buf, None, self.rew_buf, self.reset_buf, self.extras
@@ -273,10 +276,10 @@ class PfEnv:
         return self.obs_buf, None
 
     def _compute_foot_state(self):
-        self.foot_pos = self.robot.get_links_pos(self.foot_links)  # (n_envs, n_foot_links, 3)
-        self.foot_quat = self.robot.get_links_quat(self.foot_links)  # (n_envs, n_foot_links, 4)
-        self.foot_vel = self.robot.get_links_vel(self.foot_links)  # (n_envs, n_foot_links, 3)
-        self.foot_ang_vel = self.robot.get_links_ang(self.foot_links)  # (n_envs, n_foot_links, 3)
+        self.foot_pos = self.robot.get_links_pos()[:, self.foot_links, :]  # (n_envs, n_foot_links, 3)
+        self.foot_quat = self.robot.get_links_quat()[:, self.foot_links, :]  # (n_envs, n_foot_links, 4)
+        self.foot_vel = self.robot.get_links_vel()[:, self.foot_links, :]  # (n_envs, n_foot_links, 3)
+        self.foot_ang_vel = self.robot.get_links_ang()[:, self.foot_links, :]  # (n_envs, n_foot_links, 3)
 
         self.foot_inv_quat = inv_quat(self.foot_quat)  # (n_envs, n_foot_links, 4)
 

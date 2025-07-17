@@ -1,17 +1,19 @@
 import argparse
 import os
 import pickle
+import shutil
+import genesis as gs
 import torch
 from philab_genesis.point_foot.pf_env import PfEnv
-from philab_genesis.point_foot.pf_config import get_cfgs
-from rsl_rl.runners import OnPolicyRunner
+from philab_genesis.point_foot.pf_config import get_cfgs, get_train_cfg
+from philab_genesis.rsl_rl.runners import OnPolicyRunner
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--exp_name", type=str, default="pointfoot")
     parser.add_argument("-B", "--num_envs", type=int, default=4096)
-    parser.add_argument("--max_iterations", type=int, default=100)
+    parser.add_argument("--max_iterations", type=int, default=4000)
     args = parser.parse_args()
 
     gs.init(logging_level="warning")
@@ -24,7 +26,7 @@ def main():
         shutil.rmtree(log_dir)
     os.makedirs(log_dir, exist_ok=True)
 
-    env = Go2Env(
+    env = PfEnv(
         num_envs=args.num_envs, env_cfg=env_cfg, obs_cfg=obs_cfg, reward_cfg=reward_cfg, command_cfg=command_cfg
     )
 

@@ -48,6 +48,11 @@ def get_cfgs():
     env_cfg = {
         "num_actions": 6,
 
+        "links_to_keep": [
+            "foot_R_Link",
+            "foot_L_Link",
+        ],
+
         "default_joint_angles": {  # [rad]
             "abad_L_Joint": 0.0,
             "hip_L_Joint": 0.0,
