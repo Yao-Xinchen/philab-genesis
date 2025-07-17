@@ -75,6 +75,16 @@ def get_cfgs():
             "foot_L_Link",
         ],
 
+        "foot_radius": 0.03,  # [m]
+
+        "num_gait_params": 4,
+        "gait_ranges": {
+            "frequencies": [1.5, 2.5],
+            "offsets": [0.0, 1.0],
+            "durations": [0.5, 0.5],
+            "swing_height": [0.0, 0.1],
+        },
+
         # PD
         "kp": 42.0,
         "kd": 2.5,
@@ -91,8 +101,6 @@ def get_cfgs():
         "action_scale": 0.25,
         "simulate_action_latency": True,
         "clip_actions": 100.0,
-
-        "base_height_target": 0.68,
     }
 
     obs_cfg = {
@@ -110,6 +118,11 @@ def get_cfgs():
         "ang_tracking_sigma": 0.25,
         "base_height_target": 0.68,
         "feet_height_target": 0.10,
+        "kappa_gait_probs": 0.05,
+        "gait_force_sigma": 25.0,
+        "gait_vel_sigma": 0.25,
+        "gait_height_sigma": 0.005,
+
         "reward_scales": {
         },
     }
