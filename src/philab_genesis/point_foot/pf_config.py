@@ -101,7 +101,7 @@ def get_cfgs():
         "termination_if_pitch_greater_than": 20,
 
         # base pose
-        "base_init_pos": [0.0, 0.0, 0.5],
+        "base_init_pos": [0.0, 0.0, 0.8],
         "base_init_quat": [1.0, 0.0, 0.0, 0.0],
         "episode_length_s": 20.0,
         "resampling_time_s": 4.0,
@@ -111,12 +111,16 @@ def get_cfgs():
     }
 
     obs_cfg = {
-        "num_obs": 45,
+        "num_obs": 30,
         "obs_scales": {
             "lin_vel": 2.0,
             "ang_vel": 0.25,
             "dof_pos": 1.0,
             "dof_vel": 0.05,
+            "dof_acc": 0.0025,
+            "height_measurements": 5.0,
+            "contact_forces": 0.01,
+            "torque": 0.05,
         },
     }
 
@@ -133,6 +137,24 @@ def get_cfgs():
         "about_landing_threshold": 0.08,
 
         "reward_scales": {
+            "keep_balance": 1.0,
+            "tracking_lin_vel": 1.0,
+            "tracking_ang_vel": 0.5,
+            "base_height": -2.0,
+            "lin_vel_z": -0.5,
+            "ang_vel_xy": -0.05,
+            "torques": -0.00008,
+            "dof_acc": -2.5e-7,
+            "action_rate": -0.01,
+            "dof_pos_limits": -2.0,
+            "collision": -1.0,
+            "action_smooth": -0.01,
+            "orientation": -10.0,
+            "feet_distance": -100.0,
+            "feet_regulation": -0.05,
+            "foot_landing_vel": -0.15,
+            "tracking_contacts_shaped_force": -2.0,
+            "tracking_contacts_shaped_vel": -2.0,
         },
     }
 

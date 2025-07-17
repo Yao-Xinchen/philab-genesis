@@ -205,12 +205,14 @@ class PfEnv:
         # compute observations
         self.obs_buf = torch.cat(
             [
-                self.base_ang_vel * self.obs_scales["ang_vel"],  # 3
-                self.projected_gravity,  # 3
-                self.commands * self.commands_scale,  # 3
-                (self.dof_pos - self.default_dof_pos) * self.obs_scales["dof_pos"],  # 12
-                self.dof_vel * self.obs_scales["dof_vel"],  # 12
+                self.base_ang_vel * self.obs_scales["ang_vel"],
+                self.projected_gravity,
+                (self.dof_pos - self.default_dof_pos) * self.obs_scales["dof_pos"],
+                self.dof_vel * self.obs_scales["dof_vel"],
                 self.actions,
+                self.clock_inputs_sin.view(self.num_envs, 1),
+                self.clock_inputs_cos.view(self.num_envs, 1),
+                self.gaits,
             ],
             dim=-1,
         )
