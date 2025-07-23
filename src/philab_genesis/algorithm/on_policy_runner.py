@@ -41,11 +41,10 @@ import numpy as np
 from .ppo import PPO
 from .mlp_encoder import MLP_Encoder
 from .actor_critic import ActorCritic
-from legged_gym.envs.vec_env import VecEnv
-
 
 class OnPolicyRunner:
-    def __init__(self, env: VecEnv, train_cfg, log_dir=None, device="cpu"):
+    # def __init__(self, env: VecEnv, train_cfg, log_dir=None, device="cpu"):
+    def __init__(self, env, train_cfg, log_dir=None, device="cpu"):
         self.cfg = train_cfg["runner"]
         self.ecd_cfg = train_cfg[self.cfg["encoder_class_name"]]
         self.alg_cfg = train_cfg["algorithm"]
@@ -118,16 +117,7 @@ class OnPolicyRunner:
             self.logger_type = self.cfg.get("logger", "tensorboard")
             self.logger_type = self.logger_type.lower()
 
-            if self.logger_type == "wandb":
-                from ..utils.wandb_utils import WandbSummaryWriter
-
-                self.writer = WandbSummaryWriter(
-                    log_dir=self.log_dir, flush_secs=10, cfg=self.cfg
-                )
-                self.writer.log_config(
-                    self.env.cfg, self.cfg, self.alg_cfg, self.policy_cfg
-                )
-            elif self.logger_type == "tensorboard":
+            if self.logger_type == "tensorboard":
                 self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
             else:
                 raise AssertionError("logger type not found")
@@ -171,7 +161,7 @@ class OnPolicyRunner:
                         obs.to(self.device),
                         obs_history.to(self.device),
                         commands.to(self.device),
-                        critic_obs_buf.to(self.device), # critic_obs.to(self.device),
+                        critic_obs_buf.to(self.device),  # critic_obs.to(self.device),
                         rewards.to(self.device),
                         dones.to(self.device),
                     )
@@ -281,19 +271,17 @@ class OnPolicyRunner:
                 statistics.mean(locs["lenbuffer"]),
                 locs["it"],
             )
-            if (
-                self.logger_type != "wandb"
-            ):  # wandb does not support non-integer x-axis logging
-                self.writer.add_scalar(
-                    "Train/mean_reward/time",
-                    statistics.mean(locs["rewbuffer"]),
-                    self.tot_time,
-                )
-                self.writer.add_scalar(
-                    "Train/mean_episode_length/time",
-                    statistics.mean(locs["lenbuffer"]),
-                    self.tot_time,
-                )
+            # tensorboard supports time-based logging
+            self.writer.add_scalar(
+                "Train/mean_reward/time",
+                statistics.mean(locs["rewbuffer"]),
+                self.tot_time,
+            )
+            self.writer.add_scalar(
+                "Train/mean_episode_length/time",
+                statistics.mean(locs["lenbuffer"]),
+                self.tot_time,
+            )
 
         str = f" \033[1m Learning iteration {locs['it']}/{self.current_learning_iteration + locs['num_learning_iterations']} \033[0m "
 
@@ -302,7 +290,7 @@ class OnPolicyRunner:
                 f"""{'#' * width}\n"""
                 f"""{str.center(width, ' ')}\n\n"""
                 f"""{'Computation:':>{pad}} {fps:.0f} steps/s (collection: {locs[
-                            'collection_time']:.3f}s, learning {locs['learn_time']:.3f}s)\n"""
+                    'collection_time']:.3f}s, learning {locs['learn_time']:.3f}s)\n"""
                 f"""{'Value function loss:':>{pad}} {locs['mean_value_loss']:.4f}\n"""
                 f"""{'Surrogate loss:':>{pad}} {locs['mean_surrogate_loss']:.4f}\n"""
                 f"""{'Mean action noise std:':>{pad}} {mean_std.item():.4f}\n"""
@@ -317,7 +305,7 @@ class OnPolicyRunner:
                 f"""{'#' * width}\n"""
                 f"""{str.center(width, ' ')}\n\n"""
                 f"""{'Computation:':>{pad}} {fps:.0f} steps/s (collection: {locs[
-                            'collection_time']:.3f}s, learning {locs['learn_time']:.3f}s)\n"""
+                    'collection_time']:.3f}s, learning {locs['learn_time']:.3f}s)\n"""
                 f"""{'Value function loss:':>{pad}} {locs['mean_value_loss']:.4f}\n"""
                 f"""{'Surrogate loss:':>{pad}} {locs['mean_surrogate_loss']:.4f}\n"""
                 f"""{'Mean action noise std:':>{pad}} {mean_std.item():.2f}\n"""
@@ -332,7 +320,7 @@ class OnPolicyRunner:
             f"""{'Iteration time:':>{pad}} {iteration_time:.2f}s\n"""
             f"""{'Total time:':>{pad}} {self.tot_time:.2f}s\n"""
             f"""{'ETA:':>{pad}} {self.tot_time / (locs['it'] + 1) * (
-                               locs['num_learning_iterations'] - locs['it']):.1f}s\n"""
+                    locs['num_learning_iterations'] - locs['it']):.1f}s\n"""
         )
         print(log_string)
 

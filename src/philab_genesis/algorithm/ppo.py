@@ -32,9 +32,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from .mlp_encoder import MLP_Encoder
-from .actor_critic import ActorCritic
-from .rollout_storage import RolloutStorage
+from philab_genesis.algorithm.mlp_encoder import MLP_Encoder
+from philab_genesis.algorithm.actor_critic import ActorCritic
+from philab_genesis.algorithm.rollout_storage import RolloutStorage
 
 
 class PPO:

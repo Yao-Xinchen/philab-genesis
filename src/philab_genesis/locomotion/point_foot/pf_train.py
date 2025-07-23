@@ -5,14 +5,14 @@ import shutil
 import genesis as gs
 from philab_genesis.locomotion.point_foot.pf_env import PfEnv
 from philab_genesis.locomotion.point_foot.pf_config import get_cfgs, get_train_cfg
-from philab_genesis.rsl_rl.runners import OnPolicyRunner
+from philab_genesis.algorithm.on_policy_runner import OnPolicyRunner
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--exp_name", type=str, default="pointfoot")
     parser.add_argument("-B", "--num_envs", type=int, default=4096)
-    parser.add_argument("-i", "--max_iterations", type=int, default=50000)
+    parser.add_argument("-i", "--max_iterations", type=int, default=5000)
     args = parser.parse_args()
 
     gs.init(logging_level="warning")
