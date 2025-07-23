@@ -3,7 +3,7 @@ import math
 import genesis as gs
 from genesis.engine.entities import RigidEntity
 from philab_genesis.utils.math import torch_rand_float
-from genesis.utils.geom import xyz_to_quat, quat_to_xyz, transform_by_quat, inv_quat, transform_quat_by_quat
+from genesis.utils.geom import quat_to_xyz, transform_by_quat, inv_quat, transform_quat_by_quat
 
 
 class PfEnv:
@@ -107,7 +107,7 @@ class PfEnv:
         self.base_pos = torch.zeros((self.num_envs, 3), device=self.device, dtype=gs.tc_float)
         self.base_quat = torch.zeros((self.num_envs, 4), device=self.device, dtype=gs.tc_float)
         self.base_inv_quat = torch.zeros((self.num_envs, 4), device=self.device, dtype=gs.tc_float)
-        self.base_euler = torch.zeros((self.num_envs, 3), device=self.device, dtype=gs.tc_float)
+        # self.base_euler = torch.zeros((self.num_envs, 3), device=self.device, dtype=gs.tc_float)
         self.default_dof_pos = torch.tensor(
             [self.env_cfg["default_joint_angles"][name] for name in self.env_cfg["dof_names"]],
             device=self.device,
@@ -159,9 +159,9 @@ class PfEnv:
         self.episode_length_buf += 1
         self.base_pos[:] = self.robot.get_pos()
         self.base_quat[:] = self.robot.get_quat()
-        self.base_euler = quat_to_xyz(
-            transform_quat_by_quat(torch.ones_like(self.base_quat) * self.inv_base_init_quat, self.base_quat)
-        )
+        # self.base_euler = quat_to_xyz(
+        #     transform_quat_by_quat(torch.ones_like(self.base_quat) * self.inv_base_init_quat, self.base_quat)
+        # )
         inv_base_quat = inv_quat(self.base_quat)
         self.base_inv_quat[:] = inv_base_quat
         self.base_lin_vel[:] = transform_by_quat(self.robot.get_vel(), inv_base_quat)
@@ -188,8 +188,8 @@ class PfEnv:
 
         # check termination and reset
         self.reset_buf = self.episode_length_buf > self.max_episode_length
-        self.reset_buf |= torch.abs(self.base_euler[:, 1]) > self.env_cfg["termination_if_pitch_greater_than"]
-        self.reset_buf |= torch.abs(self.base_euler[:, 0]) > self.env_cfg["termination_if_roll_greater_than"]
+        # self.reset_buf |= torch.abs(self.base_euler[:, 1]) > self.env_cfg["termination_if_pitch_greater_than"]
+        # self.reset_buf |= torch.abs(self.base_euler[:, 0]) > self.env_cfg["termination_if_roll_greater_than"]
 
         time_out_idx = (self.episode_length_buf > self.max_episode_length).nonzero(as_tuple=False).flatten()
         self.extras["time_outs"] = torch.zeros_like(self.reset_buf, device=self.device, dtype=gs.tc_float)

@@ -14,11 +14,11 @@ from philab_genesis.utils.visualize import Visualizer
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--exp_name", type=str, default="pointfoot")
-    parser.add_argument("--ckpt", type=int, default=None)
+    parser.add_argument("-c", "--ckpt", type=int, default=None)
     parser.add_argument("-p", "--enable_plot", action="store_true")
     args = parser.parse_args()
 
-    gs.init()
+    gs.init(logging_level="warning")
 
     log_dir = f"logs/{args.exp_name}"
     env_cfg, obs_cfg, reward_cfg, command_cfg = get_cfgs()
@@ -61,6 +61,7 @@ def main():
         print(f"Using latest checkpoint: {latest_ckpt}")
     else:
         latest_ckpt = args.ckpt
+        print(f"Using specified checkpoint: {latest_ckpt}")
 
     resume_path = os.path.join(log_dir, f"model_{latest_ckpt}.pt")
     runner.load(resume_path)
