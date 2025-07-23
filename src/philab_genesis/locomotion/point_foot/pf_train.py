@@ -3,9 +3,8 @@ import os
 import pickle
 import shutil
 import genesis as gs
-import torch
-from philab_genesis.point_foot.pf_env import PfEnv
-from philab_genesis.point_foot.pf_config import get_cfgs, get_train_cfg
+from philab_genesis.locomotion.point_foot.pf_env import PfEnv
+from philab_genesis.locomotion.point_foot.pf_config import get_cfgs, get_train_cfg
 from philab_genesis.rsl_rl.runners import OnPolicyRunner
 
 
