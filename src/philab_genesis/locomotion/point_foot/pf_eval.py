@@ -65,17 +65,26 @@ def main():
     resume_path = os.path.join(log_dir, f"model_{latest_ckpt}.pt")
     runner.load(resume_path)
     policy = runner.get_inference_policy(device="cuda:0")
+    encoder = runner.get_inference_encoder(device="cuda:0")
 
     if args.enable_plot:
         reward_names = list(env.reward_functions.keys())
         visualizer = Visualizer(reward_names)
 
-        obs, _ = env.reset()
+        obs, obs_history, commands, critic_obs = env.get_observations()
+        obs, obs_history, commands = obs.to("cuda:0"), obs_history.to("cuda:0"), commands.to("cuda:0")
+        
         with torch.no_grad():
             while True:
-                actions = policy(obs)
+                # Get encoder output from observation history
+                encoder_out = encoder(obs_history)
+                # Combine obs + encoder_out + commands as expected by actor network
+                actor_input = torch.cat([obs, encoder_out, commands], dim=-1)
+                actions = policy(actor_input)
+                
                 env.commands[0] = torch.tensor([0.5, 0.0, 0.0], device=actions.device)
-                obs, _, rews, dones, infos = env.step(actions)
+                obs, rews, dones, infos, obs_history, commands, critic_obs = env.step(actions)
+                obs, obs_history, commands = obs.to("cuda:0"), obs_history.to("cuda:0"), commands.to("cuda:0")
 
                 reward_values = {}
                 for name, reward_func in env.reward_functions.items():
@@ -86,12 +95,20 @@ def main():
 
                 visualizer.update(reward_values)
     else:
-        obs, _ = env.reset()
+        obs, obs_history, commands, critic_obs = env.get_observations()
+        obs, obs_history, commands = obs.to("cuda:0"), obs_history.to("cuda:0"), commands.to("cuda:0")
+        
         with torch.no_grad():
             while True:
-                actions = policy(obs)
+                # Get encoder output from observation history
+                encoder_out = encoder(obs_history)
+                # Combine obs + encoder_out + commands as expected by actor network
+                actor_input = torch.cat([obs, encoder_out, commands], dim=-1)
+                actions = policy(actor_input)
+                
                 env.commands[0] = torch.tensor([0.5, 0.0, 0.0], device=actions.device)
-                obs, _, rews, dones, infos = env.step(actions)
+                obs, rews, dones, infos, obs_history, commands, critic_obs = env.step(actions)
+                obs, obs_history, commands = obs.to("cuda:0"), obs_history.to("cuda:0"), commands.to("cuda:0")
 
 
 if __name__ == "__main__":

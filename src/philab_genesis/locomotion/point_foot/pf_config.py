@@ -2,6 +2,7 @@ def get_train_cfg(exp_name, max_iterations):
     train_cfg_dict = {
         "algorithm": {
             "clip_param": 0.2,
+            "critic_take_latent": True,
             "desired_kl": 0.01,
             "entropy_coef": 0.01,
             "gamma": 0.99,
@@ -21,8 +22,17 @@ def get_train_cfg(exp_name, max_iterations):
             "critic_hidden_dims": [512, 256, 128],
             "init_noise_std": 1.0,
         },
+        "MLP_Encoder": {
+            "activation": "elu",
+            "hidden_dims": [128, 64],
+            "num_input_dim": 300,  # num_obs * obs_history_length = 30 * 10
+            "num_output_dim": 32,
+            "orthogonal_init": False,
+            "output_detach": False,
+        },
         "runner": {
             "algorithm_class_name": "PPO",
+            "encoder_class_name": "MLP_Encoder",
             "checkpoint": -1,
             "experiment_name": exp_name,
             "load_run": -1,
@@ -118,6 +128,8 @@ def get_cfgs():
 
     obs_cfg = {
         "num_obs": 30,
+        "num_privileged_obs": 33,  # base lin_vel (3) + num_obs (30)
+        "obs_history_length": 10,
         "obs_scales": {
             "lin_vel": 2.0,
             "ang_vel": 0.25,

@@ -12,7 +12,9 @@ class PfEnv:
 
         self.num_envs = num_envs
         self.num_obs = obs_cfg["num_obs"]
-        self.num_privileged_obs = None
+        self.num_privileged_obs = obs_cfg.get("num_privileged_obs", self.num_obs)
+        self.num_critic_obs = self.num_privileged_obs  # For legged_gym compatibility
+        self.obs_history_length = obs_cfg.get("obs_history_length", 10)
         self.num_actions = env_cfg["num_actions"]
         self.num_commands = command_cfg["num_commands"]
 
@@ -87,6 +89,8 @@ class PfEnv:
             self.num_envs, 1
         )
         self.obs_buf = torch.zeros((self.num_envs, self.num_obs), device=self.device, dtype=gs.tc_float)
+        self.privileged_obs_buf = torch.zeros((self.num_envs, self.num_privileged_obs), device=self.device, dtype=gs.tc_float)
+        self.obs_history = torch.zeros((self.num_envs, self.num_obs * self.obs_history_length), device=self.device, dtype=gs.tc_float)
         self.rew_buf = torch.zeros((self.num_envs,), device=self.device, dtype=gs.tc_float)
         self.reset_buf = torch.ones((self.num_envs,), device=self.device, dtype=gs.tc_int)
         self.episode_length_buf = torch.zeros((self.num_envs,), device=self.device, dtype=gs.tc_int)
@@ -219,17 +223,44 @@ class PfEnv:
             dim=-1,
         )
 
+        # compute privileged observations (includes base linear velocity as privileged info)
+        self.privileged_obs_buf = torch.cat(
+            [
+                self.base_lin_vel * self.obs_scales["lin_vel"],  # privileged info
+                self.obs_buf,  # normal observations
+            ],
+            dim=-1,
+        )
+
+        # update observation history
+        self.obs_history = torch.cat(
+            [self.obs_history[:, self.num_obs:], self.obs_buf], dim=-1
+        )
+
         self.last_actions[:, :, 1] = self.last_actions[:, :, 0]
         self.last_actions[:, :, 0] = self.actions[:]
         self.last_dof_vel[:] = self.dof_vel[:]
 
-        return self.obs_buf, None, self.rew_buf, self.reset_buf, self.extras
+        return (
+            self.obs_buf,
+            self.rew_buf,
+            self.reset_buf,
+            self.extras,
+            self.obs_history,
+            self.commands * self.commands_scale,
+            self.privileged_obs_buf
+        )
 
     def get_observations(self):
-        return self.obs_buf
+        return (
+            self.obs_buf,
+            self.obs_history,
+            self.commands * self.commands_scale,
+            self.privileged_obs_buf
+        )
 
     def get_privileged_observations(self):
-        return None
+        return self.privileged_obs_buf
 
     def reset_idx(self, envs_idx):
         if len(envs_idx) == 0:
@@ -259,6 +290,7 @@ class PfEnv:
         self.last_dof_vel[envs_idx] = 0.0
         self.episode_length_buf[envs_idx] = 0
         self.reset_buf[envs_idx] = True
+        self.obs_history[envs_idx] = 0.0
 
         # fill extras
         self.extras["episode"] = {}
